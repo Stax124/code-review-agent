@@ -67,10 +67,10 @@ impl StreamPrinter {
         }
         match target {
             StreamSection::Reasoning => {
-                print!("{}: ", "Reasoning".blue().bold());
+                println!("{}:", "Reasoning".blue().bold());
             }
             StreamSection::Content => {
-                print!("{}: ", "Response".green().bold());
+                println!("{}: ", "Response".green().bold());
             }
             StreamSection::None => {}
         }

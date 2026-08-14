@@ -110,6 +110,9 @@ async fn main() -> color_eyre::Result<()> {
         total_completion_tokens += response.usage.completion_tokens;
         total_cost += response.usage.cost;
 
+        // Provider
+        println!("{}: {}", "Routed to".yellow().bold(), response.provider);
+
         if !should_continue {
             break;
         }
