@@ -47,6 +47,11 @@ async fn main() -> color_eyre::Result<()> {
         content: "Please provide a code review for the changes listed in the diff".to_string(),
     }));
 
+    // Track costs for final report
+    let mut total_prompt_tokens = 0;
+    let mut total_completion_tokens = 0;
+    let mut total_cost = 0.0;
+
     let turn_reminders = [5, 10, 15];
     let mut turn = 1;
     let mut ran_out_of_turns = false;
@@ -101,6 +106,9 @@ async fn main() -> color_eyre::Result<()> {
             tokens_to_human_readable(response.usage.total_tokens),
             response.usage.cost
         );
+        total_prompt_tokens += response.usage.prompt_tokens;
+        total_completion_tokens += response.usage.completion_tokens;
+        total_cost += response.usage.cost;
 
         if !should_continue {
             break;
@@ -119,6 +127,15 @@ async fn main() -> color_eyre::Result<()> {
     } else {
         tracing::info!("Agent interaction completed. Total turns: {}", turn);
     }
+
+    println!(
+        "{}: Prompt tokens: {}, Completion tokens: {}, Total tokens: {}, Total cost: ${:.6}",
+        "Final Cost".green().bold(),
+        tokens_to_human_readable(total_prompt_tokens),
+        tokens_to_human_readable(total_completion_tokens),
+        tokens_to_human_readable(total_prompt_tokens + total_completion_tokens),
+        total_cost
+    );
 
     Ok(())
 }
