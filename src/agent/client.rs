@@ -206,8 +206,6 @@ impl AgentClient {
     ) -> color_eyre::Result<(OpenRouterAPIResponse, bool)> {
         let request_body = self.build_request_body();
 
-        tracing::info!("Sending streaming request to {}", self.endpoint,);
-
         let response = self
             .http_client
             .post(&self.endpoint)

@@ -43,7 +43,7 @@ impl StreamPrinter {
                     return;
                 }
                 self.begin_section(StreamSection::Content);
-                print!("{}", text.green());
+                print!("{}", text.bold());
                 let _ = std::io::stdout().flush();
             }
             StreamEvent::Done => {
