@@ -1,11 +1,16 @@
 use async_trait::async_trait;
 use serde_json::{Value, json};
+use tokio::io::AsyncBufReadExt;
 
 use crate::tools::AgentTool;
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct ReadFileToolArgs {
     file: String,
+    #[serde(default)]
+    start_line: Option<usize>,
+    #[serde(default)]
+    end_line: Option<usize>,
 }
 
 pub struct ReadFileTool {}
@@ -23,7 +28,7 @@ impl AgentTool for ReadFileTool {
     }
 
     fn description(&self) -> &str {
-        "Read the contents of a specific file."
+        "Read the contents of a specific file. Allows either reading the entire file or a specific range of lines (1-based, inclusive). Each returned line is prefixed with its line number so you can orient yourself."
     }
 
     fn properties_schema(&self) -> Value {
@@ -31,6 +36,16 @@ impl AgentTool for ReadFileTool {
             "file": {
                 "type": "string",
                 "description": "The file path to read."
+            },
+            "start_line": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "The starting line number (1-based) to read from. Optional.",
+            },
+            "end_line": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "The ending line number (1-based) to read to. Optional.",
             }
         })
     }
@@ -83,8 +98,86 @@ impl AgentTool for ReadFileTool {
             .into());
         }
 
-        let content = tokio::fs::read_to_string(canonical_path).await?;
-        Ok((content, format!("read_file: {}", args.file)))
+        // Validate line parameters up front. Lines are 1-based and inclusive.
+        if let Some(0) = args.start_line {
+            return Err("start_line must be >= 1.".into());
+        }
+        if let Some(0) = args.end_line {
+            return Err("end_line must be >= 1.".into());
+        }
+        if let (Some(s), Some(e)) = (args.start_line, args.end_line)
+            && e < s
+        {
+            return Err(format!("end_line ({}) must be >= start_line ({}).", e, s).into());
+        }
+
+        // Stream the file line-by-line instead of buffering it all into memory.
+        let file = tokio::fs::File::open(&canonical_path).await?;
+        let reader = tokio::io::BufReader::new(file);
+        let mut lines = reader.lines();
+
+        let start_line = args.start_line.unwrap_or(1);
+        let end_line = args.end_line;
+
+        let mut selected: Vec<String> = Vec::new();
+        let mut line_no: usize = 0;
+        let mut total_lines: usize = 0;
+        let mut stopped_early = false;
+
+        while let Some(line) = lines.next_line().await? {
+            line_no += 1;
+            if let Some(end) = end_line
+                && line_no > end
+            {
+                // We've read past the requested range; no need to keep going.
+                stopped_early = true;
+                break;
+            }
+            if line_no >= start_line {
+                selected.push(format!("{:>6}: {}", line_no, line));
+            }
+        }
+
+        // If we didn't stop early we reached EOF, so `line_no` is the true total.
+        if !stopped_early {
+            total_lines = line_no;
+            // `start_line` is out of range if it exceeds the number of lines.
+            // For an empty file (0 lines) a default `start_line` of 1 is still
+            // valid and yields an empty result, so clamp the floor to 1.
+            if start_line > total_lines.max(1) {
+                return Err(format!(
+                    "The file '{}' has {} line(s). start_line {} is out of range.",
+                    args.file, total_lines, start_line
+                )
+                .into());
+            }
+        }
+
+        let output = selected.join("\n");
+
+        let summary = if stopped_early {
+            // We bailed out before EOF, so the true total line count is unknown.
+            format!(
+                "read_file: {} (lines {}-{})",
+                args.file,
+                start_line,
+                end_line.unwrap()
+            )
+        } else if total_lines == 0 {
+            format!("read_file: {} (empty file)", args.file)
+        } else {
+            let effective_end = end_line.unwrap_or(total_lines).min(total_lines);
+            if start_line == 1 && end_line.is_none() {
+                format!("read_file: {} ({} lines)", args.file, total_lines)
+            } else {
+                format!(
+                    "read_file: {} (lines {}-{} of {})",
+                    args.file, start_line, effective_end, total_lines
+                )
+            }
+        };
+
+        Ok((output, summary))
     }
 }
 
