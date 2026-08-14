@@ -13,6 +13,7 @@ use crate::{
 mod agent;
 mod config;
 mod constants;
+mod publisher;
 mod stream;
 mod tools;
 mod utils;
@@ -55,6 +56,7 @@ async fn main() -> color_eyre::Result<()> {
     let turn_reminders = [5, 10, 15];
     let mut turn = 1;
     let mut ran_out_of_turns = false;
+    let mut final_review: Option<String> = None;
     while turn <= config.max_turns {
         if turn_reminders.contains(&(config.max_turns - turn)) {
             // Insert a reminder message to the agent after every 5 turns to encourage it to complete the task.
@@ -114,6 +116,12 @@ async fn main() -> color_eyre::Result<()> {
         println!("{}: {}", "Routed to".yellow().bold(), response.provider);
 
         if !should_continue {
+            final_review = response
+                .choices
+                .into_iter()
+                .next()
+                .and_then(|choice| choice.message.content)
+                .filter(|content| !content.trim().is_empty());
             break;
         }
         turn += 1;
@@ -139,6 +147,24 @@ async fn main() -> color_eyre::Result<()> {
         tokens_to_human_readable(total_prompt_tokens + total_completion_tokens),
         total_cost
     );
+
+    // Additive last step: publish the review as an MR comment when configured.
+    match (
+        final_review,
+        publisher::detect_and_build(config.gitlab_token.as_deref())?,
+    ) {
+        (Some(review), Some(publisher)) => {
+            if let Err(e) = publisher.publish(&review).await {
+                tracing::error!("Failed to publish review: {}", e);
+            }
+        }
+        (None, _) => {
+            tracing::warn!("No final review was produced; skipping review publishing.");
+        }
+        (Some(_), None) => {
+            tracing::info!("No review publisher configured; skipping review publishing.");
+        }
+    }
 
     Ok(())
 }

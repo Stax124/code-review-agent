@@ -10,6 +10,9 @@ pub struct Configuration {
 
     /// Maximum number of turns the agent can take before the program exits. This is a safety measure to prevent infinite loops.
     pub max_turns: u32,
+
+    /// Optional GitLab access token used to post the review as an MR comment. When absent, posting is disabled.
+    pub gitlab_token: Option<String>,
 }
 
 impl Configuration {
@@ -28,11 +31,17 @@ impl Configuration {
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(20);
 
+        // Publishing (optional)
+        let gitlab_token = std::env::var("CODE_REVIEW_AGENT_GITLAB_TOKEN")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
+
         Ok(Configuration {
             api_key,
             api_endpoint,
             model,
             max_turns,
+            gitlab_token,
         })
     }
 }
