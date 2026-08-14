@@ -42,9 +42,9 @@ impl AgentTool for GetCommitDiffTool {
     async fn execute(
         &self,
         args: Value,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(String, String), Box<dyn std::error::Error + Send + Sync>> {
         let args = serde_json::from_value::<GetCommitDiffToolArgs>(args)?;
         let diff = get_commit_diff(&args.commit_id)?;
-        Ok(diff)
+        Ok((diff, format!("get_commit_diff: {}", args.commit_id)))
     }
 }

@@ -23,7 +23,8 @@ pub trait AgentTool: Send + Sync {
     fn required_parameters(&self) -> Vec<&'static str>;
 
     /// This function will be called by the model when a tool is invoked.
-    async fn execute(&self, args: Value) -> Result<String, Box<dyn Error + Send + Sync>>;
+    /// It should return a tuple of (result, display_string), where result is the raw result and display_string is a human-readable string to show to the user.
+    async fn execute(&self, args: Value) -> Result<(String, String), Box<dyn Error + Send + Sync>>;
 
     /// Convenience helper that produces the exact shape you showed.
     fn to_tool_schema(&self) -> Value {

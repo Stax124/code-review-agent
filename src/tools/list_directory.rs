@@ -43,12 +43,18 @@ impl AgentTool for ListDirectoryTool {
     async fn execute(
         &self,
         args: Value,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(String, String), Box<dyn std::error::Error + Send + Sync>> {
         let args = serde_json::from_value::<ListDirectoryToolArgs>(args)?;
         let base_path = std::env::current_dir()?;
         let entries = list_directory(&base_path, args.subdirectory.as_deref())?;
 
         let output = prettify_directory_listing(&entries);
-        Ok(output)
+        Ok((
+            output,
+            format!(
+                "list_directory: {}",
+                args.subdirectory.unwrap_or_else(|| ".".to_string())
+            ),
+        ))
     }
 }

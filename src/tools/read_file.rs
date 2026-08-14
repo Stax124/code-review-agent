@@ -42,7 +42,7 @@ impl AgentTool for ReadFileTool {
     async fn execute(
         &self,
         args: Value,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(String, String), Box<dyn std::error::Error + Send + Sync>> {
         let args = serde_json::from_value::<ReadFileToolArgs>(args)?;
         let path = std::path::Path::new(&args.file);
 
@@ -84,7 +84,7 @@ impl AgentTool for ReadFileTool {
         }
 
         let content = tokio::fs::read_to_string(canonical_path).await?;
-        Ok(content)
+        Ok((content, format!("read_file: {}", args.file)))
     }
 }
 

@@ -161,7 +161,7 @@ impl AgentTool for SearchInDirectoryTool {
     async fn execute(
         &self,
         args: Value,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(String, String), Box<dyn std::error::Error + Send + Sync>> {
         let args = serde_json::from_value::<SearchInDirectoryToolArgs>(args)?;
         let path = &args.subdirectory.unwrap_or_else(|| ".".into());
 
@@ -198,6 +198,9 @@ impl AgentTool for SearchInDirectoryTool {
             output.push('\n');
         }
 
-        Ok(output)
+        Ok((
+            output,
+            format!("search_in_directory: {} -> {}", path, args.search_pattern),
+        ))
     }
 }

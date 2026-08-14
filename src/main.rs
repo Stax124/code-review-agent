@@ -4,6 +4,7 @@ use crate::{
     agent::client::{AgentClientMessage, AgentClientMessageUser},
     stream::StreamPrinter,
     utils::{
+        conversion::tokens_to_human_readable,
         git::{determine_base_branch, get_branch_diff_against_base},
         prompt::generate_system_prompt,
     },
@@ -77,19 +78,29 @@ async fn main() -> color_eyre::Result<()> {
         );
         let mut printer = StreamPrinter::new();
 
-        let (response, should_continue) =
+        let (response, should_continue, tool_calls_to_display) =
             agent_client.send(|event| printer.on_event(event)).await?;
         tracing::debug!("Response: {}", serde_json::to_string(&response)?);
 
-        for choice in response.choices.iter() {
-            println!(
-                "{}: {} | {}: {}",
-                "Tool calls".yellow().bold(),
-                choice.message.tool_calls.clone().unwrap_or_default().len(),
-                "Finish reason".yellow().bold(),
-                choice.finish_reason
-            );
+        // Tool calls
+        println!(
+            "{} ({}):",
+            "Tool calls".yellow().bold(),
+            tool_calls_to_display.len()
+        );
+        for display in tool_calls_to_display {
+            println!("- {}", display);
         }
+
+        // Cost
+        println!(
+            "{}: Prompt tokens: {}, Completion tokens: {}, Total tokens: {}, Total cost: ${:.6}",
+            "Cost".yellow().bold(),
+            tokens_to_human_readable(response.usage.prompt_tokens),
+            tokens_to_human_readable(response.usage.completion_tokens),
+            tokens_to_human_readable(response.usage.total_tokens),
+            response.usage.cost
+        );
 
         if !should_continue {
             break;

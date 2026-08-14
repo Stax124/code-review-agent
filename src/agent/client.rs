@@ -138,11 +138,13 @@ impl AgentClient {
     pub async fn process_tool_calls(
         &mut self,
         tool_calls: Vec<AgentClientMessageToolCall>,
-    ) -> color_eyre::Result<()> {
+    ) -> color_eyre::Result<Vec<String>> {
         tracing::debug!(
             "Parsed tools: {}",
             serde_json::to_string(&tool_calls).unwrap_or_default()
         );
+
+        let mut to_display_to_user: Vec<String> = Vec::new();
 
         // Process each tool call and execute the corresponding tool if it exists in the available tools.
         for tool_call in tool_calls {
@@ -159,12 +161,14 @@ impl AgentClient {
                         });
 
                 match tool.execute(parsed_arguments).await {
-                    Ok(result) => {
+                    Ok((result, display)) => {
                         tracing::debug!(
                             "Tool '{}' executed successfully. Result: {}",
                             tool_call.function.name,
                             serde_json::to_string(&result).unwrap_or_default()
                         );
+
+                        to_display_to_user.push(display);
 
                         // Append it to the messages vector for future requests to the agent.
                         let tool_message = AgentClientMessage::Tool(AgentClientMessageTool {
@@ -185,6 +189,8 @@ impl AgentClient {
                                 tool_call.function.name, e
                             )),
                         });
+                        to_display_to_user
+                            .push(format!("{}: ERROR - {}", tool_call.function.name, e));
                         self.messages.push(error_message);
                     }
                 }
@@ -193,17 +199,18 @@ impl AgentClient {
                     "Tool '{}' not found in available tools.",
                     tool_call.function.name
                 );
+                to_display_to_user.push(format!("{}: NOT FOUND", tool_call.function.name));
             }
         }
 
-        Ok(())
+        Ok(to_display_to_user)
     }
 
     /// Start the communication with external API and process the streaming response
     pub async fn send(
         &mut self,
         mut on_event: impl FnMut(StreamEvent),
-    ) -> color_eyre::Result<(OpenRouterAPIResponse, bool)> {
+    ) -> color_eyre::Result<(OpenRouterAPIResponse, bool, Vec<String>)> {
         let request_body = self.build_request_body();
 
         let response = self
@@ -378,7 +385,7 @@ impl AgentClient {
     async fn finalize_stream(
         &mut self,
         acc: StreamAccumulator,
-    ) -> color_eyre::Result<(OpenRouterAPIResponse, bool)> {
+    ) -> color_eyre::Result<(OpenRouterAPIResponse, bool, Vec<String>)> {
         let StreamAccumulator {
             role,
             content,
@@ -418,9 +425,11 @@ impl AgentClient {
         self.messages
             .push(AgentClientMessage::Assistant(assistant_message));
 
-        if are_any_tools_requested {
-            self.process_tool_calls(tool_calls).await?;
-        }
+        let to_display = if are_any_tools_requested {
+            self.process_tool_calls(tool_calls).await?
+        } else {
+            Vec::new()
+        };
 
         let api_response = OpenRouterAPIResponse {
             id: chunk_id,
@@ -445,7 +454,7 @@ impl AgentClient {
             }),
         };
 
-        Ok((api_response, are_any_tools_requested))
+        Ok((api_response, are_any_tools_requested, to_display))
     }
 }
 
