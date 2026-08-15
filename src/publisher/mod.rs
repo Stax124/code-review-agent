@@ -2,10 +2,12 @@ pub mod gitlab;
 
 use async_trait::async_trait;
 
+use crate::agent::telemetry::Telemetry;
+
 /// Publishes a completed code review.
 #[async_trait]
 pub trait ReviewPublisher: Send + Sync {
-    async fn publish(&self, review: &str) -> color_eyre::Result<()>;
+    async fn publish(&self, review: &str, telemetry: &Telemetry) -> color_eyre::Result<()>;
 }
 
 /// Detect the hosting platform from the CI environment and build the matching publisher

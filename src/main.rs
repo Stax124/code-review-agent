@@ -28,30 +28,8 @@ async fn main() -> color_eyre::Result<()> {
 
     let full_diff = get_branch_diff_against_base(&base_branch)?;
     let system_prompt = generate_system_prompt(&full_diff, &base_branch)?;
-
-    let mut agent_client = agent::client::AgentClient::builder()
-        .with_model(&config.model)
-        .with_endpoint(&config.api_endpoint)
-        .with_api_key(&config.api_key)
-        .with_system_message(&system_prompt)
-        .with_temperature(0.0)
-        .with_tool(Box::new(tools::get_commit_diff::GetCommitDiffTool::new()))
-        .with_tool(Box::new(tools::list_directory::ListDirectoryTool::new()))
-        .with_tool(Box::new(
-            tools::search_in_directory::SearchInDirectoryTool::new(),
-        ))
-        .with_tool(Box::new(tools::read_file::ReadFileTool::new()))
-        .build()?;
-
-    agent_client.add_message(AgentClientMessage::User(AgentClientMessageUser {
-        role: "user".to_string(),
-        content: "Please provide a code review for the changes listed in the diff".to_string(),
-    }));
-
-    // Track costs for final report
-    let mut total_prompt_tokens = 0;
-    let mut total_completion_tokens = 0;
-    let mut total_cost = 0.0;
+    let mut agent_client = agent::build_agent(&config, &system_prompt)?;
+    let mut telemetry = agent::telemetry::Telemetry::new();
 
     let turn_reminders = [5, 10, 15];
     let mut turn = 1;
@@ -108,9 +86,12 @@ async fn main() -> color_eyre::Result<()> {
             tokens_to_human_readable(response.usage.total_tokens),
             response.usage.cost
         );
-        total_prompt_tokens += response.usage.prompt_tokens;
-        total_completion_tokens += response.usage.completion_tokens;
-        total_cost += response.usage.cost;
+        telemetry.update(
+            &response.provider,
+            response.usage.prompt_tokens,
+            response.usage.completion_tokens,
+            response.usage.cost,
+        );
 
         // Provider
         println!("{}: {}", "Routed to".yellow().bold(), response.provider);
@@ -139,14 +120,7 @@ async fn main() -> color_eyre::Result<()> {
         tracing::info!("Agent interaction completed. Total turns: {}", turn);
     }
 
-    println!(
-        "{}: Prompt tokens: {}, Completion tokens: {}, Total tokens: {}, Total cost: ${:.6}",
-        "Final Cost".green().bold(),
-        tokens_to_human_readable(total_prompt_tokens),
-        tokens_to_human_readable(total_completion_tokens),
-        tokens_to_human_readable(total_prompt_tokens + total_completion_tokens),
-        total_cost
-    );
+    telemetry.display_summary();
 
     // Additive last step: publish the review as an MR comment when configured.
     match (
@@ -154,7 +128,7 @@ async fn main() -> color_eyre::Result<()> {
         publisher::detect_and_build(config.gitlab_token.as_deref())?,
     ) {
         (Some(review), Some(publisher)) => {
-            if let Err(e) = publisher.publish(&review).await {
+            if let Err(e) = publisher.publish(&review, &telemetry).await {
                 tracing::error!("Failed to publish review: {}", e);
             }
         }

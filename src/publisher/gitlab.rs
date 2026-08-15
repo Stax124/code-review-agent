@@ -1,6 +1,6 @@
 use super::ReviewPublisher;
+use crate::agent::telemetry::Telemetry;
 use async_trait::async_trait;
-use colored::Colorize;
 
 const DEFAULT_API_BASE: &str = "https://gitlab.com/api/v4";
 
@@ -81,20 +81,50 @@ impl GitlabPublisher {
             mr_iid,
         })
     }
+
+    /// Generates a GitLab comment footer (utilizing markdown) that summarizes the telemetry data, including token usage and cost.
+    pub fn generate_summary_from_telemetry(&self, telemetry: &Telemetry) -> String {
+        let mut summary = String::new();
+        summary.push_str("\n\n---\n\n");
+        summary.push_str("### Telemetry\n\n");
+
+        let mut stats_entries: Vec<_> = telemetry.provider_stats.iter().collect();
+        stats_entries.sort_by_key(|(k, _)| *k);
+        for (provider, stats) in stats_entries {
+            summary.push_str(&format!(
+                "- **{}**: Prompt tokens: {}, Completion tokens: {}, Total tokens: {}, Total cost: ${:.6}\n",
+                provider,
+                crate::utils::conversion::tokens_to_human_readable(stats.total_prompt_tokens),
+                crate::utils::conversion::tokens_to_human_readable(stats.total_completion_tokens),
+                crate::utils::conversion::tokens_to_human_readable(
+                    stats.total_prompt_tokens + stats.total_completion_tokens
+                ),
+                stats.total_cost
+            ));
+        }
+
+        summary
+    }
 }
 
 #[async_trait]
 impl ReviewPublisher for GitlabPublisher {
-    async fn publish(&self, review: &str) -> color_eyre::Result<()> {
+    async fn publish(&self, review: &str, telemetry: &Telemetry) -> color_eyre::Result<()> {
         let url = format!(
             "{}/projects/{}/merge_requests/{}/notes",
             self.api_base, self.project_id, self.mr_iid
         );
 
+        let review_with_summary = format!(
+            "{}\n{}",
+            review,
+            self.generate_summary_from_telemetry(telemetry)
+        );
+
         let response = self
             .http_client
             .post(&url)
-            .json(&serde_json::json!({ "body": review }))
+            .json(&serde_json::json!({ "body": review_with_summary }))
             .send()
             .await?;
 
@@ -107,11 +137,6 @@ impl ReviewPublisher for GitlabPublisher {
         }
 
         tracing::info!("Review posted to merge request !{}.", self.mr_iid);
-        println!(
-            "{}: Review posted to merge request !{}",
-            "GitLab".green().bold(),
-            self.mr_iid
-        );
         Ok(())
     }
 }
