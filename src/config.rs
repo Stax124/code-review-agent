@@ -34,7 +34,12 @@ impl Configuration {
         // Publishing (optional)
         let gitlab_token = std::env::var("CODE_REVIEW_AGENT_GITLAB_TOKEN")
             .ok()
-            .filter(|s| !s.trim().is_empty());
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| {
+                std::env::var("GITLAB_API_TOKEN")
+                    .ok()
+                    .filter(|s| !s.trim().is_empty())
+            });
 
         Ok(Configuration {
             api_key,
