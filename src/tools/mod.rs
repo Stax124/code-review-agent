@@ -1,3 +1,4 @@
+pub mod file_tree;
 pub mod get_commit_diff;
 pub mod list_directory;
 pub mod read_file;

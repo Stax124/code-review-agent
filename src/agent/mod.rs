@@ -1,8 +1,9 @@
 use crate::{
     config::Configuration,
     tools::{
-        get_commit_diff::GetCommitDiffTool, list_directory::ListDirectoryTool,
-        read_file::ReadFileTool, search_in_directory::SearchInDirectoryTool,
+        file_tree::FileTreeTool, get_commit_diff::GetCommitDiffTool,
+        list_directory::ListDirectoryTool, read_file::ReadFileTool,
+        search_in_directory::SearchInDirectoryTool,
     },
 };
 
@@ -22,6 +23,7 @@ pub fn build_agent(
         .with_temperature(0.0)
         .with_tool(Box::new(GetCommitDiffTool::new()))
         .with_tool(Box::new(ListDirectoryTool::new()))
+        .with_tool(Box::new(FileTreeTool::new()))
         .with_tool(Box::new(SearchInDirectoryTool::new()))
         .with_tool(Box::new(ReadFileTool::new()))
         .build()?;
