@@ -16,11 +16,28 @@ impl GitlabPublisher {
     /// Build a publisher from GitLab CI environment variables
     pub fn from_env(token: &str) -> color_eyre::Result<Option<Self>> {
         let project_id = std::env::var("CI_PROJECT_ID").ok();
-        let mr_iid = std::env::var("CI_MERGE_REQUEST_IID").ok();
+
+        // We may not be running in a merge request pipeline, but we can still try to get the merge request IID from the CI_OPEN_MERGE_REQUESTS variable if it's set.
+        let mr_iid = std::env::var("CI_MERGE_REQUEST_IID")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| {
+                std::env::var("CI_OPEN_MERGE_REQUESTS")
+                    .ok()
+                    .and_then(|mr_list| {
+                        mr_list
+                            .split(',')
+                            .next()?
+                            .split('!')
+                            .nth(1)
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_digit()))
+                    })
+            });
 
         let (Some(project_id), Some(mr_iid)) = (project_id, mr_iid) else {
             tracing::warn!(
-                "CI_PROJECT_ID / CI_MERGE_REQUEST_IID not set; not running in a GitLab MR pipeline, review posting is disabled."
+                "CI_PROJECT_ID / (CI_MERGE_REQUEST_IID, CI_OPEN_MERGE_REQUESTS) not set; review posting is disabled."
             );
             return Ok(None);
         };
