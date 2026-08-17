@@ -13,6 +13,9 @@ pub struct Configuration {
 
     /// Optional GitLab access token used to post the review as an MR comment. When absent, posting is disabled.
     pub gitlab_token: Option<String>,
+
+    /// Optional path to a file containing the system prompt. When absent, the default prompt is used.
+    pub system_prompt_path: Option<String>,
 }
 
 impl Configuration {
@@ -31,7 +34,7 @@ impl Configuration {
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(20);
 
-        // Publishing (optional)
+        // Publishing
         let gitlab_token = std::env::var("CODE_REVIEW_AGENT_GITLAB_TOKEN")
             .ok()
             .filter(|s| !s.trim().is_empty())
@@ -41,12 +44,18 @@ impl Configuration {
                     .filter(|s| !s.trim().is_empty())
             });
 
+        // System prompt
+        let system_prompt_path = std::env::var("CODE_REVIEW_AGENT_SYSTEM_PROMPT_PATH")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
+
         Ok(Configuration {
             api_key,
             api_endpoint,
             model,
             max_turns,
             gitlab_token,
+            system_prompt_path,
         })
     }
 }

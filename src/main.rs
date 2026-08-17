@@ -27,7 +27,14 @@ async fn main() -> color_eyre::Result<()> {
     let config = config::Configuration::new()?;
 
     let full_diff = get_branch_diff_against_base(&base_branch)?;
-    let system_prompt = generate_system_prompt(&full_diff, &base_branch)?;
+    let system_prompt = generate_system_prompt(
+        &full_diff,
+        &base_branch,
+        config
+            .system_prompt_path
+            .as_deref()
+            .map(std::path::Path::new),
+    )?;
     let mut agent_client = agent::build_agent(&config, &system_prompt)?;
     let mut telemetry = agent::telemetry::Telemetry::new();
 
