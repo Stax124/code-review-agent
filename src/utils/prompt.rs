@@ -14,6 +14,15 @@ pub fn load_system_prompt_from_file(path: Option<&Path>) -> color_eyre::Result<O
         None => Path::new("CODE_REVIEW_AGENT.md"),
     };
 
+    // Make sure that the file exists
+    if !path.exists() {
+        tracing::info!(
+            "System prompt file not found at {}. Using default prompt.",
+            path.display()
+        );
+        return Ok(None);
+    }
+
     let canonical_path = match path.canonicalize() {
         Ok(p) => p,
         Err(e) => {
@@ -25,15 +34,6 @@ pub fn load_system_prompt_from_file(path: Option<&Path>) -> color_eyre::Result<O
             return Ok(None);
         }
     };
-
-    // Make sure that the file exists
-    if !canonical_path.exists() {
-        tracing::info!(
-            "System prompt file not found at {}. Using default prompt.",
-            path.display()
-        );
-        return Ok(None);
-    }
 
     // Make sure that the path is a file
     let metadata = std::fs::metadata(&canonical_path)?;

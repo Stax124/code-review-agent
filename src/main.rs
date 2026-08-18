@@ -1,7 +1,12 @@
+use std::time::Duration;
+
 use colored::Colorize;
 
 use crate::{
-    agent::client::{AgentClientMessage, AgentClientMessageUser},
+    agent::{
+        client::{AgentClient, AgentClientMessage, AgentClientMessageUser},
+        response::OpenRouterAPIResponse,
+    },
     stream::StreamPrinter,
     utils::{
         conversion::tokens_to_human_readable,
@@ -9,6 +14,11 @@ use crate::{
         prompt::generate_system_prompt,
     },
 };
+
+/// Initial delay before the first retry of a failed provider request.
+const INITIAL_RETRY_BACKOFF: Duration = Duration::from_secs(2);
+/// Upper bound for exponential backoff between retries.
+const MAX_RETRY_BACKOFF: Duration = Duration::from_secs(30);
 
 mod agent;
 mod config;
@@ -68,10 +78,9 @@ async fn main() -> color_eyre::Result<()> {
                 .cyan()
                 .bold()
         );
-        let mut printer = StreamPrinter::new();
 
         let (response, should_continue, tool_calls_to_display) =
-            agent_client.send(|event| printer.on_event(event)).await?;
+            send_turn_with_retry(&mut agent_client, config.max_retries).await?;
         tracing::debug!("Response: {}", serde_json::to_string(&response)?);
 
         // Tool calls
@@ -148,4 +157,44 @@ async fn main() -> color_eyre::Result<()> {
     }
 
     Ok(())
+}
+
+/// Send one agent turn, retrying transient provider failures without advancing
+/// the conversation. Messages are only appended after a successful response.
+async fn send_turn_with_retry(
+    agent_client: &mut AgentClient,
+    max_retries: u32,
+) -> color_eyre::Result<(OpenRouterAPIResponse, bool, Vec<String>)> {
+    let mut attempt = 0;
+    let mut backoff = INITIAL_RETRY_BACKOFF;
+
+    loop {
+        let mut printer = StreamPrinter::new();
+        match agent_client.send(|event| printer.on_event(event)).await {
+            Ok(result) => return Ok(result),
+            Err(error) if attempt < max_retries => {
+                // Check that the error is a "Too Many Requests" (HTTP 429)
+                if !error.to_string().contains("Too Many Requests") {
+                    return Err(error.wrap_err(format!(
+                        "Provider request failed after {} attempt(s)",
+                        attempt + 1
+                    )));
+                }
+
+                attempt += 1;
+                tracing::warn!(
+                    "Provider request failed (attempt {attempt}/{max_retries}): {error}. Retrying in {}s…",
+                    backoff.as_secs()
+                );
+                tokio::time::sleep(backoff).await;
+                backoff = (backoff * 2).min(MAX_RETRY_BACKOFF);
+            }
+            Err(error) => {
+                return Err(error.wrap_err(format!(
+                    "Provider request failed after {} attempt(s)",
+                    attempt + 1
+                )));
+            }
+        }
+    }
 }
