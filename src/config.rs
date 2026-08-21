@@ -76,6 +76,55 @@ pub struct Configuration {
         help_heading = "System prompt"
     )]
     pub system_prompt_path: Option<String>,
+
+    /// Extra arguments passed to the model provider in the request body.
+    #[command(flatten)]
+    pub model_options: ModelOptions,
+}
+
+/// Model-specific options that are merged into the request body sent to the provider.
+#[derive(Debug, Clone, Default, clap::Args)]
+pub struct ModelOptions {
+    /// Reasoning effort for the model, e.g. `low`, `medium`, `high` or other model-specific values
+    #[arg(
+        long,
+        env = "CODE_REVIEW_AGENT_REASONING_EFFORT",
+        help_heading = "Model options"
+    )]
+    pub reasoning_effort: Option<String>,
+
+    /// Maximum number of tokens the model may generate
+    #[arg(
+        long,
+        env = "CODE_REVIEW_AGENT_MAX_COMPLETION_TOKENS",
+        help_heading = "Model options"
+    )]
+    pub max_completion_tokens: Option<u32>,
+}
+
+impl ModelOptions {
+    pub fn to_request_fields(&self) -> serde_json::Map<String, serde_json::Value> {
+        let mut fields = serde_json::Map::new();
+
+        if let Some(effort) = self
+            .reasoning_effort
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+        {
+            fields.insert(
+                "reasoning".to_string(),
+                serde_json::json!({ "effort": effort }),
+            );
+        }
+        if let Some(max_completion_tokens) = self.max_completion_tokens {
+            fields.insert(
+                "max_completion_tokens".to_string(),
+                serde_json::json!(max_completion_tokens),
+            );
+        }
+
+        fields
+    }
 }
 
 /// Parses a numeric value, treating empty or whitespace-only input as `DEFAULT`.
@@ -105,6 +154,12 @@ impl Configuration {
                     .filter(|s| !s.trim().is_empty())
             });
         self.system_prompt_path = self.system_prompt_path.filter(|s| !s.trim().is_empty());
+        self.model_options.reasoning_effort = self
+            .model_options
+            .reasoning_effort
+            .take()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
 
         if self.api_key.trim().is_empty() {
             return Err(color_eyre::eyre::eyre!(

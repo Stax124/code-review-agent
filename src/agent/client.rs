@@ -103,6 +103,7 @@ pub struct AgentClient {
     pub endpoint: String,
     pub http_client: reqwest::Client,
     pub available_tools: IndexMap<String, Arc<Box<dyn AgentTool>>>,
+    pub extra_request_fields: serde_json::Map<String, serde_json::Value>,
 }
 
 impl AgentClient {
@@ -125,14 +126,20 @@ impl AgentClient {
     }
 
     pub fn build_request_body(&self) -> serde_json::Value {
-        serde_json::json!({
+        let mut body = serde_json::json!({
             "model": self.model,
             "messages": self.messages,
             "temperature": self.temperature,
             "tools": self.build_tool_body(),
             "stream": true,
             "stream_options": { "include_usage": true }
-        })
+        });
+
+        if let Some(fields) = body.as_object_mut() {
+            fields.extend(self.extra_request_fields.clone());
+        }
+
+        body
     }
 
     pub async fn process_tool_calls(
@@ -465,6 +472,7 @@ pub struct AgentClientBuilder {
     endpoint: Option<String>,
     api_key: Option<String>,
     available_tools: Vec<Box<dyn AgentTool>>,
+    extra_request_fields: serde_json::Map<String, serde_json::Value>,
 }
 
 impl AgentClientBuilder {
@@ -476,11 +484,22 @@ impl AgentClientBuilder {
             endpoint: None,
             api_key: None,
             available_tools: Vec::new(),
+            extra_request_fields: serde_json::Map::new(),
         }
     }
 
     pub fn with_tool(mut self, tool: Box<dyn AgentTool>) -> Self {
         self.available_tools.push(tool);
+        self
+    }
+
+    /// Overwrite fields (e.g. `max_completion_tokens`, `reasoning`) in the
+    /// request body sent to the provider. Useful for model-specific settings.
+    pub fn with_extra_request_fields(
+        mut self,
+        fields: serde_json::Map<String, serde_json::Value>,
+    ) -> Self {
+        self.extra_request_fields.extend(fields);
         self
     }
 
@@ -547,6 +566,7 @@ impl AgentClientBuilder {
                 .into_iter()
                 .map(|tool| (tool.name().to_string(), Arc::new(tool)))
                 .collect(),
+            extra_request_fields: self.extra_request_fields,
         })
     }
 }

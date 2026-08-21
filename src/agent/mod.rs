@@ -21,6 +21,7 @@ pub fn build_agent(
         .with_api_key(&config.api_key)
         .with_system_message(system_prompt)
         .with_temperature(0.0)
+        .with_extra_request_fields(config.model_options.to_request_fields())
         .with_tool(Box::new(GetCommitDiffTool::new()))
         .with_tool(Box::new(ListDirectoryTool::new()))
         .with_tool(Box::new(FileTreeTool::new()))
