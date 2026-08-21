@@ -1,10 +1,11 @@
 use clap::Parser;
+use reqwest::Url;
 
 /// Configuration for the code review agent.
 ///
 /// Values can be set via CLI flags or `CODE_REVIEW_AGENT_*` environment variables.
 /// CLI flags take precedence over env vars, which take precedence over defaults.
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(version, about)]
 pub struct Configuration {
     /// API key sent in the `Authorization` header
@@ -39,6 +40,7 @@ pub struct Configuration {
         long,
         env = "CODE_REVIEW_AGENT_MAX_TURNS",
         default_value_t = 20,
+        value_parser = parse_u32_or_default::<20>,
         help_heading = "Safety"
     )]
     pub max_turns: u32,
@@ -49,6 +51,7 @@ pub struct Configuration {
         long,
         env = "CODE_REVIEW_AGENT_MAX_RETRIES",
         default_value_t = 3,
+        value_parser = parse_u32_or_default::<3>,
         help_heading = "Safety"
     )]
     pub max_retries: u32,
@@ -75,6 +78,18 @@ pub struct Configuration {
     pub system_prompt_path: Option<String>,
 }
 
+/// Parses a numeric value, treating empty or whitespace-only input as `DEFAULT`.
+fn parse_u32_or_default<const DEFAULT: u32>(s: &str) -> Result<u32, String> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        Ok(DEFAULT)
+    } else {
+        trimmed
+            .parse::<u32>()
+            .map_err(|_| format!("invalid numeric value: {trimmed:?}"))
+    }
+}
+
 impl Configuration {
     pub fn new() -> color_eyre::Result<Self> {
         Self::parse().normalized()
@@ -97,6 +112,39 @@ impl Configuration {
             ));
         }
 
+        self.api_endpoint = self.api_endpoint.trim().to_string();
+        if self.api_endpoint.is_empty() {
+            return Err(color_eyre::eyre::eyre!(
+                "API endpoint must not be empty. Please provide --api-endpoint or set CODE_REVIEW_AGENT_API_ENDPOINT."
+            ));
+        }
+        if let Err(e) = Url::parse(&self.api_endpoint) {
+            return Err(color_eyre::eyre::eyre!(
+                "API endpoint '{}' is not a valid URL: {e}",
+                self.api_endpoint
+            ));
+        }
+
+        self.model = self.model.trim().to_string();
+        if self.model.is_empty() {
+            return Err(color_eyre::eyre::eyre!(
+                "Model must not be empty. Please provide --model or set CODE_REVIEW_AGENT_MODEL."
+            ));
+        }
+
         Ok(self)
+    }
+}
+
+impl std::fmt::Debug for Configuration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Configuration")
+            .field("api_key", &"<redacted>")
+            .field(
+                "gitlab_token",
+                &self.gitlab_token.as_ref().map(|_| "<redacted>"),
+            )
+            // ... non-secret fields
+            .finish()
     }
 }
