@@ -93,10 +93,10 @@ async fn main() -> color_eyre::Result<()> {
             println!("- {}", display);
         }
 
-        // Cost
+        // Summary of token usage and cost
         println!(
-            "{}: Prompt tokens: {}, Completion tokens: {}, Total tokens: {}, Total cost: ${:.6}",
-            "Cost".yellow().bold(),
+            "{}: Prompt tokens: {}, Completion tokens: {}, Total tokens: {}, Cost: ${:.6}",
+            "Summary".yellow().bold(),
             tokens_to_human_readable(response.usage.prompt_tokens),
             tokens_to_human_readable(response.usage.completion_tokens),
             tokens_to_human_readable(response.usage.total_tokens),
