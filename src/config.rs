@@ -1,12 +1,26 @@
 use clap::Parser;
 use reqwest::Url;
 
+/// Styles for the CLI help and error output, matching the app's color scheme.
+fn cli_styles() -> clap::builder::Styles {
+    use clap::builder::styling::{AnsiColor, Effects};
+
+    clap::builder::Styles::styled()
+        .header(AnsiColor::Yellow.on_default().effects(Effects::BOLD))
+        .usage(AnsiColor::Yellow.on_default().effects(Effects::BOLD))
+        .literal(AnsiColor::BrightCyan.on_default())
+        .placeholder(AnsiColor::Cyan.on_default())
+        .error(AnsiColor::Red.on_default().effects(Effects::BOLD))
+        .valid(AnsiColor::Green.on_default())
+        .invalid(AnsiColor::Yellow.on_default())
+}
+
 /// Configuration for the code review agent.
 ///
 /// Values can be set via CLI flags or `CODE_REVIEW_AGENT_*` environment variables.
 /// CLI flags take precedence over env vars, which take precedence over defaults.
 #[derive(Parser)]
-#[command(version, about)]
+#[command(version, about, color = clap::ColorChoice::Auto, styles = cli_styles())]
 pub struct Configuration {
     /// API key sent in the `Authorization` header
     #[arg(

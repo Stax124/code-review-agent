@@ -33,9 +33,9 @@ async fn main() -> color_eyre::Result<()> {
     dotenvy::dotenv().ok();
     utils::logging::init_logger();
 
-    let base_branch = determine_base_branch()?;
     let config = config::Configuration::new()?;
 
+    let base_branch = determine_base_branch()?;
     let full_diff = get_branch_diff_against_base(&base_branch)?;
     let system_prompt = generate_system_prompt(
         &full_diff,
