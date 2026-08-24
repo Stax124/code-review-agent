@@ -10,7 +10,7 @@ use crate::{
     stream::StreamPrinter,
     utils::{
         conversion::tokens_to_human_readable,
-        git::{determine_base_branch, get_branch_diff_against_base},
+        git::{determine_base_branch, find_merge_base, get_diff_against_commit},
         prompt::generate_system_prompt,
     },
 };
@@ -36,7 +36,13 @@ async fn main() -> color_eyre::Result<()> {
     let config = config::Configuration::new()?;
 
     let base_branch = determine_base_branch()?;
-    let full_diff = get_branch_diff_against_base(&base_branch)?;
+    let merge_base = find_merge_base(&base_branch)?;
+    tracing::info!(
+        "Diverged from base branch '{}' at commit {}",
+        base_branch,
+        merge_base
+    );
+    let full_diff = get_diff_against_commit(&merge_base)?;
     let system_prompt = generate_system_prompt(
         &full_diff,
         &base_branch,

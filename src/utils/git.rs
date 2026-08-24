@@ -102,20 +102,37 @@ pub fn get_commit_diff(commit_id: &str) -> color_eyre::Result<String> {
     Ok(diff)
 }
 
-/// Get the diff of the current working tree against `base_ref`.
-///
-/// Uses `git diff <base_ref>` (not `<base_ref>..HEAD`), so the result includes
-/// both commits on the current branch and uncommitted (staged + unstaged)
-/// changes. `base_ref` may be a branch name (e.g. `origin/main`), a tag, or a
-/// commit hash.
-///
-/// Note: no `--` separator is used because `git diff -- <rev>` treats `<rev>`
-/// as a pathspec (yielding an empty diff); the revision must come before any
-/// `--`. `base_ref` is trusted (sourced from `git symbolic-ref`, the CI env
-/// var, or hardcoded `main`/`master`), so no disambiguation is needed.
-pub fn get_branch_diff_against_base(base_ref: &str) -> color_eyre::Result<String> {
+/// Find the commit where the current branch diverged from `base_ref`.
+pub fn find_merge_base(base_ref: &str) -> color_eyre::Result<String> {
     let output = Command::new("git")
-        .args(["diff", "--no-color", "--end-of-options", base_ref])
+        .args(["merge-base", "--end-of-options", base_ref, "HEAD"])
+        .output()?;
+
+    if !output.status.success() {
+        color_eyre::eyre::bail!(
+            "Git command failed with status: {}, stderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let merge_base = String::from_utf8(output.stdout)?;
+    let merge_base = merge_base.trim().to_string();
+
+    if merge_base.is_empty() {
+        color_eyre::eyre::bail!(
+            "git merge-base returned no output for base ref: {}",
+            base_ref
+        );
+    }
+
+    Ok(merge_base)
+}
+
+/// Get the diff of the current working tree against `commit_id`.
+pub fn get_diff_against_commit(commit_id: &str) -> color_eyre::Result<String> {
+    let output = Command::new("git")
+        .args(["diff", "--no-color", "--end-of-options", commit_id])
         .output()?;
 
     if !output.status.success() {
