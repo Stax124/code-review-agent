@@ -72,7 +72,7 @@ pub fn list_commits_on_this_branch(base_branch: &str) -> color_eyre::Result<Vec<
         );
     }
 
-    let commit_ids = String::from_utf8(output.stdout)?
+    let commit_ids = String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(|line| {
             let mut parts = line.splitn(2, ' ');
@@ -98,7 +98,7 @@ pub fn get_commit_diff(commit_id: &str) -> color_eyre::Result<String> {
         color_eyre::eyre::bail!("Git command failed with status: {}", output.status);
     }
 
-    let diff = String::from_utf8(output.stdout)?;
+    let diff = String::from_utf8_lossy(&output.stdout).into_owned();
     Ok(diff)
 }
 
@@ -143,7 +143,7 @@ pub fn get_diff_against_commit(commit_id: &str) -> color_eyre::Result<String> {
         );
     }
 
-    let diff = String::from_utf8(output.stdout)?;
+    let diff = String::from_utf8_lossy(&output.stdout).into_owned();
     Ok(diff)
 }
 
